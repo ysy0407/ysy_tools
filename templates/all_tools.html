@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YSY工具-全部工具</title>
+</head>
+<body>
+<div>
+    <p>欢迎, {{ user.name }}！ <a href="/user_home">点击此链接返回用户主页</a>，<a href="/logout">点击此链接退出登录</a></p>
+    {% if bad_message %}
+        <p style="color:red">{{ bad_message }}</p>
+    {% endif %}
+</div>
+<div>
+    <p>下面为全部工具，若需使用请联系管理员</p>
+    <table>
+        <thead>
+        <tr>
+            <th>工具名称</th>
+            <th>工具简介</th>
+            <th>总使用次数</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for tool in tools %}
+            <tr>
+                <td>{{ tool.name }}</td>
+                <td>{{ tool.desc }}</td>
+                <td>{{ tool.use_total_times }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

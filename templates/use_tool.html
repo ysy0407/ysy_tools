@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YSY工具-使用工具</title>
+</head>
+<body>
+<div>
+    <p>欢迎, {{ user.name }}！ <a href="/user_home">点击此链接返回用户主页</a>，<a href="/logout">点击此链接退出登录</a></p>
+    {% if bad_message %}
+        <p style="color:red">{{ bad_message }}</p>
+    {% endif %}
+</div>
+<div>
+    <form action="/execute_tool?tool_id={{ tool.id }}" method="post" enctype="multipart/form-data">
+        <table>
+            <tbody>
+            <tr>
+                <th>工具名称</th>
+                <td>{{ tool.name }}</td>
+            </tr>
+            <tr>
+                <th>工具简介</th>
+                <td>{{ tool.desc }}</td>
+            </tr>
+            {% for execute_param in execute_params %}
+                <tr>
+                    <th>{{ execute_param.name }}</th>
+                    {% if execute_param.type == "file" %}
+                        <td><input type="file" name="{{ execute_param.key }}"
+                                   accept="{{ execute_param.file_types }}"></td>
+                    {% else %}
+                        <td><input type="text" name="{{ execute_param.key }}"></td>
+                    {% endif %}
+                    <td>{{ execute_param.desc }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <p>
+            <button type="submit">提交</button>
+        </p>
+    </form>
+</div>
+</body>
+</html>
