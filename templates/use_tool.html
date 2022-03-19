@@ -26,12 +26,20 @@
             {% for execute_param in execute_params %}
                 <tr>
                     <th>{{ execute_param.name }}</th>
+                    <td>
                     {% if execute_param.type == "file" %}
-                        <td><input type="file" name="{{ execute_param.key }}"
-                                   accept="{{ execute_param.file_types }}"></td>
+                        <input type="file" name="{{ execute_param.key }}" accept="{{ execute_param.file_types }}">
                     {% else %}
-                        <td><input type="text" name="{{ execute_param.key }}"></td>
+                        <input type="text" name="{{ execute_param.key }}">
                     {% endif %}
+                    </td>
+                    <td>
+                        {% if execute_param.required == 1 %}
+                            必填
+                        {% else %}
+                            选填
+                        {% endif %}
+                    </td>
                     <td>{{ execute_param.desc }}</td>
                 </tr>
             {% endfor %}
