@@ -19,12 +19,10 @@ def get_user_usable_tools(user: User) -> list:
     # 将查询到的结果循环生成Tools对象并放入list中进行返回
     return list(map(lambda result: Tool(**result), fetch_all(
         "select tool.id, tool.name, tool.desc, tool.tool_file_name, "
-        "times.times as user_use_times, times.last_time as user_last_use_time "
+        "usable_tools.times as user_use_times, usable_tools.last_time as user_last_use_time "
         "from sys_tool tool "
-        "join sys_user_use_tool_times times on tool.id = times.tool_id and times.user_id = ?"
-        "where tool.id in ("
-        "select tools_id from sys_user_usable_tools where user_id = ?"
-        ")", [user.id, user.id])))
+        "join sys_user_usable_tools usable_tools on tool.id = usable_tools.tool_id and usable_tools.user_id = ?",
+        [user.id])))
 
 
 def get_all_tools() -> list:
@@ -45,7 +43,7 @@ def get_by_id(tools_id: int, user_id: int) -> Tool:
         "select id, name, desc, tool_file_name "
         "from sys_tool "
         "where id=("
-        "select tools_id from sys_user_usable_tools where tools_id=? and user_id = ?"
+        "select tool_id from sys_user_usable_tools where tool_id=? and user_id = ?"
         ")",
         [tools_id, user_id]
     )
@@ -80,7 +78,7 @@ def add_tool_use_times(tools_id: int, user_id: int):
             "set use_total_times = use_total_times + 1 "
             "where id = ?",
             [tools_id])
-    execute("update sys_user_use_tool_times set times = times + 1, "
+    execute("update sys_user_usable_tools set times = times + 1, "
             "last_time = datetime(strftime('%s','now'), 'unixepoch', 'localtime') "
             "where tool_id = ? and user_id = ?",
             [tools_id, user_id])

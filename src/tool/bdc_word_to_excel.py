@@ -3,12 +3,14 @@
 # @Author: ysy
 # @Time: 2022-03-18 14:57
 
+import os
 import re
 import time
 from docx import Document
 from openpyxl import load_workbook
 from openpyxl.styles import Font, colors
 from src.util.path_util import base_path_join
+from src.util.logger_util import logger
 
 # 匹配表名的正则表达式
 TABLE_NAME_PATTERN = '^([a-zA-Z0-9_]{3,})(\t| )*(（|\(){1}(.*)(\)|）){1}$'
@@ -55,7 +57,10 @@ class Handle(object):
     def __init__(self, system_name, word_file_path):
         self.system_name = system_name
         self.word_file_path = word_file_path
-        self.excel_file_path = RESULT_EXCEL_TEMPLATE_FILE_NAME.replace('模板', self.system_name)
+        self.excel_file_path = self.word_file_path.replace(
+            os.path.split(self.word_file_path)[1],
+            RESULT_EXCEL_TEMPLATE_FILE_NAME.replace('模板', self.system_name)
+        )
         self.table_info_list = list()
 
     # 检查此段内容是否为表名，若为表名，返回(英文表名，中文表名)
@@ -70,7 +75,7 @@ class Handle(object):
     # 从Word文件中读取表信息list
     def read_table_info_list_from_word_file(self):
         document = Document(self.word_file_path)
-        print('document.tables', len(document.tables))
+        logger.info('system_name: %s, document.tables: %s', self.system_name, len(document.tables))
         for paragraph in document.paragraphs:
             paragraph_text = paragraph.text
             # 若段落为表名，则获取表名和描述
@@ -82,7 +87,8 @@ class Handle(object):
                     check_result[1],
                     document.tables[len(self.table_info_list) - 1 + COLUMN_TABLE_START_INDEX]
                 ))
-                print(len(self.table_info_list), self.table_info_list[-1])
+                # print(len(self.table_info_list), self.table_info_list[-1])
+        logger.info('len(table_info_list): %s', len(self.table_info_list))
 
     # 将表信息list写入到excel中
     def write_table_info_list_to_excel(self):
@@ -90,6 +96,7 @@ class Handle(object):
         sheets = workbook.worksheets
         for i in range(len(self.table_info_list)):
             table_info = self.table_info_list[i]
+            logger.info('handle index: %s, table info: %s', i + 1, table_info)
             # 向第0个sheet（TABLE_LIST）中增加当前表信息
             sheets[0].append(table_info.get_table_list_row())
             # 设置当前行表名的超链接和对应样式，跳转到对应的sheet
@@ -106,12 +113,11 @@ class Handle(object):
         pass
 
     def run(self):
-        print('handle starting')
+        logger.info('handle starting')
         start_time = int(round(time.time() * 1000))
         self.read_table_info_list_from_word_file()
         self.write_table_info_list_to_excel()
-        print('result file path:', self.excel_file_path)
-        print("handle over, use time:", int(round(time.time() * 1000)) - start_time, "ms")
+        logger.info("handle over, use time: %sms", int(round(time.time() * 1000)) - start_time)
         return self.excel_file_path
 
 
