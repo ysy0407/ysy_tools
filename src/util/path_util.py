@@ -14,6 +14,8 @@ __NOW_DIR = os.path.dirname(os.path.abspath(__file__))
 """项目根目录"""
 BASE_PATH: Union[str] = __NOW_DIR[0:__NOW_DIR.find(APP_NAME) + len(APP_NAME)]
 
+# 图片后缀
+IMAGE_SUFFIX = ['jpg', 'png', 'jpeg', 'bmp']
 
 def base_path_join(*paths: AnyStr) -> str:
     """
@@ -24,5 +26,11 @@ def base_path_join(*paths: AnyStr) -> str:
     return os.path.join(BASE_PATH, *paths)
 
 
+def is_image(image_path):
+    return not image_path.startswith('~$') and os.path.splitext(image_path)[1][1:] in IMAGE_SUFFIX
+
+
 if __name__ == '__main__':
+    print(is_image(r'test.jpg'))
+    print(is_image(r'test.txt'))
     pass

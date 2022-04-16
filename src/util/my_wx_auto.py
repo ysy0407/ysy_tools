@@ -9,6 +9,7 @@ Author: tikic@qq.com
 Source: https://github.com/cluic/wxauto
 License: MIT License
 Version: 3.3.5.3
+# 因为基于网页版的itchat都已经不能用了，就用了基于uiautomation的wxauto
 """
 import uiautomation as uia
 import win32gui, win32con
@@ -27,146 +28,6 @@ COPYDICT = {}
 class WxParam:
     PICTURE_MSG_TYPE = '图片'
     SpecialTypes = ['[文件]', '[图片]', '[视频]', '[音乐]', '[链接]', '[动画表情]']
-    PICTURE_SAVE_DIR_PATH = None
-
-
-class WxUtils:
-
-    @staticmethod
-    def SplitMessage(msgItem):
-        uia.SetGlobalSearchTimeout(0)
-        runtimeId = ''.join([str(i) for i in msgItem.GetRuntimeId()])
-        msgItemName = msgItem.Name
-        msg=None
-        try:
-            # 昵称和群昵称都有时，是消息
-            user_name_item = msgItem.ButtonControl(RegexName=r'^.*$')
-            nick_name_item = msgItem.TextControl(RegexName=r'^.*$')
-            msg = ('Msg', user_name_item.Name, nick_name_item.Name, msgItemName, runtimeId)
-        except LookupError:
-            # 当有Name相等的子节点时，窗格：时间，编辑：撤回，按钮：查看更多消息，文本：以下为新消息
-            childControlType = msgItem.Control(Name=msgItemName).ControlType
-            if childControlType == uia.ControlType.PaneControl:
-                msg = ('Time', msgItemName, runtimeId)
-            elif msgItemName.endswith('撤回了一条消息') and childControlType == uia.ControlType.EditControl:
-                msg = ('Revoke', msgItemName, runtimeId)
-            elif msgItemName == '查看更多消息' and childControlType == uia.ControlType.ButtonControl:
-                msg = ('More', msgItemName, runtimeId)
-            elif msgItemName == '以下为新消息' and childControlType == uia.ControlType.TextControl:
-                msg = ('New', msgItemName, runtimeId)
-            elif childControlType == uia.ControlType.EditControl:
-                msg = ('SYS', msgItemName, runtimeId)
-            else:
-                msg = ('Unknown', msgItemName, runtimeId)
-        uia.SetGlobalSearchTimeout(10.0)
-        return msg
-
-    @staticmethod
-    def _getSpecialMsgType(msgType):
-        return '[{}]'.format(msgType)
-
-    @staticmethod
-    def SetClipboard(data, dtype='text'):
-        '''复制文本信息或图片到剪贴板
-        data : 要复制的内容，str 或 Image 图像'''
-        if dtype.upper() == 'TEXT':
-            type_data = win32con.CF_UNICODETEXT
-        elif dtype.upper() == 'IMAGE':
-            from io import BytesIO
-            type_data = win32con.CF_DIB
-            output = BytesIO()
-            data.save(output, 'BMP')
-            data = output.getvalue()[14:]
-        else:
-            raise ValueError('param (dtype) only "text" or "image" supported')
-        wc.OpenClipboard()
-        wc.EmptyClipboard()
-        wc.SetClipboardData(type_data, data)
-        wc.CloseClipboard()
-
-    @staticmethod
-    def Screenshot(hwnd, to_clipboard=True):
-        '''为句柄为hwnd的窗口程序截图
-        hwnd : 句柄
-        to_clipboard : 是否复制到剪贴板
-        '''
-        import pyscreenshot as shot
-        bbox = win32gui.GetWindowRect(hwnd)
-        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, \
-                              win32con.SWP_SHOWWINDOW | win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
-        win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0, \
-                              win32con.SWP_SHOWWINDOW | win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
-        win32gui.BringWindowToTop(hwnd)
-        im = shot.grab(bbox)
-        if to_clipboard:
-            WxUtils.SetClipboard(im, 'image')
-        return im
-
-    @staticmethod
-    def SavePic(msgItem, fileName='{date}-{userName}-{nickName}-{random}'):
-        '''根据传入的消息找到子节点中是按钮且Name属性为空的，点击后进行保存'''
-        if msgItem is None or not msgItem.Name == WxUtils._getSpecialMsgType(WxParam.PICTURE_MSG_TYPE):
-            return
-        wx = WeChat()
-        # 边界小于0表示在屏幕上，要往上滚动
-        while msgItem.BoundingRectangle.top < wx.MsgList.BoundingRectangle.top+10:
-            wx.MsgList.WheelUp(wheelTimes=3, waitTime=0.1)
-        msgItem.ButtonControl(Name='').Click()
-        Pic = uia.WindowControl(ClassName='ImagePreviewWnd', Name='图片查看')
-        Pic.SendKeys('{Ctrl}s')
-        SaveAs = Pic.WindowControl(ClassName='#32770', Name='另存为...')
-        SaveAsEdit = SaveAs.EditControl(ClassName='Edit', Name='文件名:')
-        SaveButton = Pic.ButtonControl(ClassName='Button', Name='保存(S)')
-        PicName, Ex = os.path.splitext(SaveAsEdit.GetValuePattern().Value)
-        savePath = WxParam.PICTURE_SAVE_DIR_PATH
-        if not savePath:
-            savePath = os.getcwd()
-        if not fileName:
-            fileName = PicName
-        else:
-            msg = WxUtils.SplitMessage(msgItem)
-            fileName = fileName.replace('{date}', time.strftime('%Y%m%d', time.localtime()))\
-                .replace('{userName}', msg[1]).replace('{nickName}', msg[2])\
-                .replace('{random}', str(int(random.uniform(1000, 9999))))
-        FilePath = os.path.realpath(os.path.join(savePath, fileName + Ex))
-        print('save picture:', FilePath)
-        SaveAsEdit.SendKeys(FilePath)
-        SaveButton.Click()
-        Pic.SendKeys('{Esc}')
-
-    @staticmethod
-    def ControlSize(control):
-        locate = control.BoundingRectangle
-        size = (locate.width(), locate.height())
-        return size
-
-    @staticmethod
-    def ClipboardFormats(unit=0, *units):
-        units = list(units)
-        wc.OpenClipboard()
-        u = wc.EnumClipboardFormats(unit)
-        wc.CloseClipboard()
-        units.append(u)
-        if u:
-            units = WxUtils.ClipboardFormats(u, *units)
-        return units
-
-    @staticmethod
-    def CopyDict():
-        Dict = {}
-        for i in WxUtils.ClipboardFormats():
-            if i == 0:
-                continue
-            wc.OpenClipboard()
-            try:
-                content = wc.GetClipboardData(i)
-                wc.CloseClipboard()
-            except:
-                wc.CloseClipboard()
-                raise ValueError
-            if len(str(i)) >= 4:
-                Dict[str(i)] = content
-        return Dict
 
 
 class WeChat:
@@ -338,3 +199,186 @@ class WeChat:
             return 1
         else:
             return 0
+
+
+class WxUtils:
+
+    @staticmethod
+    def SplitMessage(msgItem):
+        uia.SetGlobalSearchTimeout(0)
+        runtimeId = ''.join([str(i) for i in msgItem.GetRuntimeId()])
+        msgItemName = msgItem.Name
+        msg=None
+        try:
+            # 昵称和群昵称都有时，是消息
+            user_name_item = msgItem.ButtonControl(RegexName=r'^.*$')
+            nick_name_item = msgItem.TextControl(RegexName=r'^.*$')
+            msg = ('Msg', user_name_item.Name, nick_name_item.Name, msgItemName, runtimeId)
+        except LookupError:
+            # 当有Name相等的子节点时，窗格：时间，编辑：撤回，按钮：查看更多消息，文本：以下为新消息
+            childControlType = msgItem.Control(Name=msgItemName).ControlType
+            if childControlType == uia.ControlType.PaneControl:
+                msg = ('Time', msgItemName, runtimeId)
+            elif msgItemName.endswith('撤回了一条消息') and childControlType == uia.ControlType.EditControl:
+                msg = ('Revoke', msgItemName, runtimeId)
+            elif msgItemName == '查看更多消息' and childControlType == uia.ControlType.ButtonControl:
+                msg = ('More', msgItemName, runtimeId)
+            elif msgItemName == '以下为新消息' and childControlType == uia.ControlType.TextControl:
+                msg = ('New', msgItemName, runtimeId)
+            elif childControlType == uia.ControlType.EditControl:
+                msg = ('SYS', msgItemName, runtimeId)
+            else:
+                msg = ('Unknown', msgItemName, runtimeId)
+        uia.SetGlobalSearchTimeout(10.0)
+        return msg
+
+    @staticmethod
+    def _getSpecialMsgType(msgType):
+        return '[{}]'.format(msgType)
+
+    @staticmethod
+    def SetClipboard(data, dtype='text'):
+        '''复制文本信息或图片到剪贴板
+        data : 要复制的内容，str 或 Image 图像'''
+        if dtype.upper() == 'TEXT':
+            type_data = win32con.CF_UNICODETEXT
+        elif dtype.upper() == 'IMAGE':
+            from io import BytesIO
+            type_data = win32con.CF_DIB
+            output = BytesIO()
+            data.save(output, 'BMP')
+            data = output.getvalue()[14:]
+        else:
+            raise ValueError('param (dtype) only "text" or "image" supported')
+        wc.OpenClipboard()
+        wc.EmptyClipboard()
+        wc.SetClipboardData(type_data, data)
+        wc.CloseClipboard()
+
+    @staticmethod
+    def Screenshot(hwnd, to_clipboard=True):
+        '''为句柄为hwnd的窗口程序截图
+        hwnd : 句柄
+        to_clipboard : 是否复制到剪贴板
+        '''
+        import pyscreenshot as shot
+        bbox = win32gui.GetWindowRect(hwnd)
+        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0, \
+                              win32con.SWP_SHOWWINDOW | win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
+        win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0, \
+                              win32con.SWP_SHOWWINDOW | win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
+        win32gui.BringWindowToTop(hwnd)
+        im = shot.grab(bbox)
+        if to_clipboard:
+            WxUtils.SetClipboard(im, 'image')
+        return im
+
+    @staticmethod
+    def SavePic(msgItem, fileName='{date}-{userName}-{nickName}-{random}', saveDirPath=os.getcwd()):
+        """
+            根据传入的消息找到子节点中是按钮且Name属性为空的，点击后进行保存，若图片不在当前窗口显示时，会自动滚动
+            TODO 每次调用都会创建WeChat对象，有点费资源啊
+        :param msgItem: 需要保存的节点
+        :param fileName: 指定文件名格式，其中的花括号会转为对应的内容（会将用户名和昵称中的短杠去掉），为空则使用文件原名，在微信里就是：微信图片加日期和时间
+        :param saveDirPath: 图片保存的文件夹绝对路径，不存在则创建，默认是当前路径，若不是个文件夹则抛出错误
+        :return: 保存成功时返回图片名，非图片的item时返回None
+        """
+        if msgItem is None or not msgItem.Name == WxUtils._getSpecialMsgType(WxParam.PICTURE_MSG_TYPE):
+            return None
+        if not os.path.exists(saveDirPath):
+            os.mkdir(saveDirPath)
+            print('the path is not exist, now make it', saveDirPath)
+        if not os.path.isdir(saveDirPath):
+            raise Exception('the path is not a dir', saveDirPath)
+        wx = WeChat()
+        # 图片上边界小于微信聊天窗口界面表示在上方，要往上滚动
+        while msgItem.BoundingRectangle.top < wx.MsgList.BoundingRectangle.top+10:
+            wx.MsgList.WheelUp(wheelTimes=3, waitTime=0.1)
+        # 图片下边界大于微信聊天窗口界面表示在下方，要往下滚动
+        while msgItem.BoundingRectangle.bottom > wx.MsgList.BoundingRectangle.bottom-10:
+            wx.MsgList.WheelDown(wheelTimes=3, waitTime=0.1)
+        msgItem.ButtonControl(Name='').Click()
+        Pic = uia.WindowControl(ClassName='ImagePreviewWnd', Name='图片查看')
+        Pic.SendKeys('{Ctrl}s')
+        SaveAs = Pic.WindowControl(ClassName='#32770', Name='另存为...')
+        SaveAsEdit = SaveAs.EditControl(ClassName='Edit', Name='文件名:')
+        # SaveButton = Pic.ButtonControl(ClassName='Button', Name='保存(S)')
+        PicName, Ex = os.path.splitext(SaveAsEdit.GetValuePattern().Value)
+        if not fileName:
+            fileName = PicName
+        else:
+            msg = WxUtils.SplitMessage(msgItem)
+            fileName = fileName.replace('{date}', time.strftime('%Y%m%d', time.localtime()))\
+                .replace('{userName}', msg[1].replace('-', ''))\
+                .replace('{nickName}', msg[2].replace('-', ''))\
+                .replace('{random}', str(int(random.uniform(10000, 99999))))
+        FilePath = os.path.realpath(os.path.join(saveDirPath, fileName + Ex))
+        print('save picture:', FilePath)
+        SaveAsEdit.SendKeys(FilePath)
+        # 将点击保存键保存改为传入回车键，减少鼠标移动过程以加快速度
+        SaveAsEdit.SendKeys('{Enter}')
+        # SaveButton.Click()
+        Pic.SendKeys('{Esc}')
+        return fileName + Ex
+
+    @staticmethod
+    def ControlSize(control):
+        locate = control.BoundingRectangle
+        size = (locate.width(), locate.height())
+        return size
+
+    @staticmethod
+    def ClipboardFormats(unit=0, *units):
+        units = list(units)
+        wc.OpenClipboard()
+        u = wc.EnumClipboardFormats(unit)
+        wc.CloseClipboard()
+        units.append(u)
+        if u:
+            units = WxUtils.ClipboardFormats(u, *units)
+        return units
+
+    @staticmethod
+    def CopyDict():
+        Dict = {}
+        for i in WxUtils.ClipboardFormats():
+            if i == 0:
+                continue
+            wc.OpenClipboard()
+            try:
+                content = wc.GetClipboardData(i)
+                wc.CloseClipboard()
+            except:
+                wc.CloseClipboard()
+                raise ValueError
+            if len(str(i)) >= 4:
+                Dict[str(i)] = content
+        return Dict
+
+
+
+if __name__ == '__main__':
+    wx = WeChat()
+    wx.GetSessionList()
+    wx.ChatWith('文件传输助手', RollTimes=1)
+
+    # 获取最后100条消息，并打印
+    # msgs = wx.GetLastMessageArray(size=100)
+    # for msg in msgs:
+    #     print(msg)
+
+    # 保存消息中的图片
+    msgItemArray = wx.GetMessageItemArray(size=50)
+    for item in msgItemArray:
+        print(item)
+        WxUtils.SavePic(item, fileName='{date}-{nickName}-{random}', saveDirPath=r'C:\data\wx-get-picture\HeSuanJieGuo')
+
+    # 每秒获取最后一条消息并打印，若重复则不打印
+    # last_msg_id = None
+    # for i in range(100):
+    #     msg = wx.GetLastMessage()
+    #     if not msg[2] == last_msg_id:
+    #         print(msg)
+    #         last_msg_id = msg[2]
+    #     time.sleep(1)
+    pass
