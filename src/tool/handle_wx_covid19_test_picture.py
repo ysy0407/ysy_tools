@@ -11,6 +11,7 @@ from src.util.my_wx_auto import *
 from src.util.bai_du_api_util import *
 from src.util.common_util import *
 from src.util.path_util import *
+from src.util.excel_util import Xlsx
 
 # 图片插入在Excel中的宽高
 IMAGE_SIZE = (72, 156)
@@ -50,6 +51,13 @@ def get_room_number(pic_name):
     return re.sub('[^0-9]', '', pic_name.split('-')[1])
 
 
+def move_no_room_number_picture(pic_name, src_path, dst_path):
+    if not os.path.exists(dst_path):
+        os.mkdir(dst_path)
+    move_to_path = os.path.join(dst_path, pic_name)
+    shutil.move(os.path.join(src_path, pic_name), move_to_path)
+
+
 class HandleAntigenPicture(object):
     '''将微信聊天图片，保存到excel中，并将群昵称处理为房间号'''
 
@@ -59,53 +67,21 @@ class HandleAntigenPicture(object):
     def __init__(self, handle_base_dir, result_excel_name='antigen_result.xlsx') -> None:
         self.handle_base_dir = handle_base_dir
         self.no_room_number_dir = os.path.join(handle_base_dir, 'no_room_number')
-        self.bai_du_api = None
-        self.result_excel_path = os.path.join(handle_base_dir, result_excel_name)
-        self.workbook = None
-        self.result_sheet = None
-
-    def _init_result_sheet(self):
-        print('init result excel', self.result_excel_path)
-        self.workbook = Workbook()
-        self.result_sheet = self.workbook.worksheets[0]
-        self.result_sheet.column_dimensions['B'].width = IMAGE_CELL_SIZE[0]
-        for i, header in enumerate(self.HEADER_ROW):
-            self.result_sheet.cell(1, i + 1, header)
-
-    def write_result(self, row, room_number, pic_path):
-        """
-            将一行抗原结果写入excel
-        :param row: 行号
-        :param room_number: 房间号
-        :param pic_path: 核酸截图路径
-        """
-        if not self.workbook:
-            self._init_result_sheet()
-        print('row :', row, room_number, pic_path)
-        self.result_sheet.row_dimensions[row].height = IMAGE_CELL_SIZE[1]
-        self.result_sheet.cell(row, 1, room_number)
-        image = Image(pic_path)
-        image.width, image.height = IMAGE_SIZE
-        self.result_sheet.add_image(image, anchor='B' + str(row))
-
-    def _save_result_sheet(self):
-        print('save result excel', self.result_excel_path)
-        self.workbook.save(self.result_excel_path)
-        self.workbook.close()
+        self.result_xlsx = Xlsx(os.path.join(handle_base_dir, result_excel_name))
+        self.result_xlsx.init_header(self.HEADER_ROW, {'B': IMAGE_CELL_SIZE[0]})
 
     def save_to_excel(self, pic_name_list=None):
-        self._init_result_sheet()
         for i, pic_name in enumerate(pic_name_list if pic_name_list else os.listdir(self.handle_base_dir)):
             if is_image(pic_name):
                 pic_path = os.path.join(self.handle_base_dir, pic_name)
                 room_number = get_room_number(pic_name)
                 if not room_number:
-                    no_room_number_pic_path = os.path.join(self.no_room_number_dir, pic_name)
-                    print('pic_name:', pic_name, 'can\'t get room number, move to', no_room_number_pic_path)
-                    shutil.copyfile(pic_path, no_room_number_pic_path)
+                    print('pic_name:', pic_name, 'can\'t get room number, move to', self.no_room_number_dir)
+                    move_no_room_number_picture(pic_name, self.handle_base_dir, self.no_room_number_dir)
                     continue
-                self.write_result(i + 2, room_number, pic_path)
-        self._save_result_sheet()
+                self.result_xlsx.write_row([room_number], row_height=IMAGE_CELL_SIZE[1])
+                self.result_xlsx.add_image('B' + str(i+2), pic_path, IMAGE_SIZE)
+        self.result_xlsx.save()
 
     def run(self, group_name, last_msg_size):
         pic_name_list = save_wx_picture(self.handle_base_dir, group_name, last_msg_size)
@@ -125,14 +101,11 @@ class HandleNucleicPicture(object):
     def __init__(self, handle_base_dir, result_excel_name='nucleic_result.xlsx') -> None:
         self.handle_base_dir = handle_base_dir
         self.no_room_number_dir = os.path.join(handle_base_dir, 'no_room_number')
-        self.bai_du_api = None
-        self.result_excel_path = os.path.join(handle_base_dir, result_excel_name)
-        self.workbook = None
-        self.result_sheet = None
+        self.bai_du_api = BaiDuApi('g1S8iIbqBGGe8xKlAmWEC6DA', 'W3Kwt7XrN72PWXdsFhfDLMjoIL99D9TS')
+        self.result_xlsx = Xlsx(os.path.join(handle_base_dir, result_excel_name))
+        self.result_xlsx.init_header(self.HEADER_ROW, {'D': 12, 'E': IMAGE_CELL_SIZE[0]})
 
     def picture_ocr_handle(self, pic_name):
-        if not self.bai_du_api:
-            self.bai_du_api = BaiDuApi('g1S8iIbqBGGe8xKlAmWEC6DA', 'W3Kwt7XrN72PWXdsFhfDLMjoIL99D9TS')
         ocr_result_list = self.bai_du_api.ocr(os.path.join(self.handle_base_dir, pic_name))
         # 若ocr结果中含有以下文字表示是核酸检测的截图
         if all_in_list(HandleNucleicPicture.OCR_HAS_WORDS_LIST, ocr_result_list):
@@ -144,62 +117,25 @@ class HandleNucleicPicture(object):
         else:
             return None, None, None
 
-    def _init_result_sheet(self):
-        print('init result excel', self.result_excel_path)
-        self.workbook = Workbook()
-        self.result_sheet = self.workbook.worksheets[0]
-        self.result_sheet.column_dimensions['D'].width = 12
-        self.result_sheet.column_dimensions['E'].width = IMAGE_CELL_SIZE[0]
-        for i, header in enumerate(self.HEADER_ROW):
-            self.result_sheet.cell(1, i + 1, header)
-
-    def _save_result_sheet(self):
-        print('save result excel', self.result_excel_path)
-        self.workbook.save(self.result_excel_path)
-        self.workbook.close()
-
-    def write_result(self, row, room_number, name, result, result_word, pic_path):
-        """
-            将一行ocr结果写入excel
-        :param row: 行号
-        :param room_number: 房间号
-        :param name: 姓名
-        :param result: 是否阴性
-        :param result_word: 核酸结果文字
-        :param pic_path: 核酸截图路径
-        """
-        if not self.workbook:
-            self._init_result_sheet()
-        print('row :', row, room_number, name, result, result_word, pic_path)
-        self.result_sheet.row_dimensions[row].height = IMAGE_CELL_SIZE[1]
-        self.result_sheet.cell(row, 1, room_number)
-        self.result_sheet.cell(row, 2, name)
-        self.result_sheet.cell(row, 3, result)
-        self.result_sheet.cell(row, 4, result_word)
-        image = Image(pic_path)
-        image.width, image.height = IMAGE_SIZE
-        self.result_sheet.add_image(image, anchor='E' + str(row))
-
     def save_to_excel(self, pic_name_list=None):
-        self._init_result_sheet()
         for i, pic_name in enumerate(pic_name_list if pic_name_list else os.listdir(self.handle_base_dir)):
             if is_image(pic_name):
                 pic_path = os.path.join(self.handle_base_dir, pic_name)
                 room_number = get_room_number(pic_name)
                 if not room_number:
-                    no_room_number_pic_path = os.path.join(self.no_room_number_dir, pic_name)
-                    print('pic_name:', pic_name, 'can\'t get room number, move to', no_room_number_pic_path)
-                    shutil.copyfile(pic_path, no_room_number_pic_path)
+                    print('pic_name:', pic_name, 'can\'t get room number, move to', self.no_room_number_dir)
+                    move_no_room_number_picture(pic_name, self.handle_base_dir, self.no_room_number_dir)
                     continue
                 name, result, result_word = self.picture_ocr_handle(pic_path)
                 # name, result, result_word = ('周仲韵<', True, '【阴性】')
                 if not name:
                     print('pic_name:', pic_name, 'is not a covid-19 test picture')
                     continue
-                self.write_result(i + 2, room_number, name, result, result_word, pic_path)
+                self.result_xlsx.write_row([room_number, name, result, result_word], row_height=IMAGE_CELL_SIZE[1])
+                self.result_xlsx.add_image('E' + str(i+2), pic_path, IMAGE_SIZE)
                 if not result:
                     print('pic_name:', pic_name, 'name: ', name, 'is not negative, result_word:', result_word)
-        self._save_result_sheet()
+        self.result_xlsx.save()
 
     def run(self, group_name, last_msg_size):
         pic_name_list = save_wx_picture(self.handle_base_dir, group_name, last_msg_size)
@@ -209,9 +145,11 @@ class HandleNucleicPicture(object):
 
 
 if __name__ == '__main__':
-    # handleAntigenPicture = HandleAntigenPicture(r'C:\data\wx-get-picture\KangYuanJieGuo-test')
-    # handleAntigenPicture.run('30弄2号楼业主群', 50)
-    handleNucleicPicture = HandleNucleicPicture(r'C:\data\wx-get-picture\HeSuanJieGuo-test')
-    handleNucleicPicture.save_to_excel()
+    handleAntigenPicture = HandleAntigenPicture(r'C:\data\wx-get-picture\KangYuanJieGuo-test')
+    # handleAntigenPicture.save_to_excel()
+    handleAntigenPicture.run('30弄2号楼业主群', 200)
+
+    # handleNucleicPicture = HandleNucleicPicture(r'C:\data\wx-get-picture\HeSuanJieGuo-test')
+    # handleNucleicPicture.save_to_excel()
     # handleNucleicPicture.run('管一二街坊清美', 50)
     pass

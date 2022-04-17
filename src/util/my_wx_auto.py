@@ -295,7 +295,7 @@ class WxUtils:
         while msgItem.BoundingRectangle.top < wx.MsgList.BoundingRectangle.top+10:
             wx.MsgList.WheelUp(wheelTimes=3, waitTime=0.1)
         # 图片下边界大于微信聊天窗口界面表示在下方，要往下滚动
-        while msgItem.BoundingRectangle.bottom > wx.MsgList.BoundingRectangle.bottom-10:
+        while msgItem.BoundingRectangle.bottom > wx.MsgList.BoundingRectangle.bottom:
             wx.MsgList.WheelDown(wheelTimes=3, waitTime=0.1)
         msgItem.ButtonControl(Name='').Click()
         Pic = uia.WindowControl(ClassName='ImagePreviewWnd', Name='图片查看')
