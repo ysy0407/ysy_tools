@@ -23,6 +23,8 @@ UPDATE = '2021-09-06'
 VERSION = '3.3.5.3'
 
 COPYDICT = {}
+MY_USERNAME = '沐'
+MY_NICKNAME = '于松源901'
 
 
 class WxParam:
@@ -211,9 +213,14 @@ class WxUtils:
         msg=None
         try:
             # 昵称和群昵称都有时，是消息
-            user_name_item = msgItem.ButtonControl(RegexName=r'^.*$')
-            nick_name_item = msgItem.TextControl(RegexName=r'^.*$')
-            msg = ('Msg', user_name_item.Name, nick_name_item.Name, msgItemName, runtimeId)
+            user_name = msgItem.ButtonControl(RegexName=r'^.*$').Name
+            # TODO 很奇怪虽然是按照Name不为空找的，但是如果是自己发的，还是会找到，所以就直接将值设置为自己的
+            if '' == user_name:
+                user_name = MY_USERNAME
+                nick_name = MY_NICKNAME
+            else:
+                nick_name = msgItem.TextControl(RegexName=r'^.*$').Name
+            msg = ('Msg', user_name, nick_name, msgItemName, runtimeId)
         except LookupError:
             # 当有Name相等的子节点时，窗格：时间，编辑：撤回，按钮：查看更多消息，文本：以下为新消息
             childControlType = msgItem.Control(Name=msgItemName).ControlType
@@ -274,13 +281,14 @@ class WxUtils:
         return im
 
     @staticmethod
-    def SavePic(msgItem, fileName='{date}-{userName}-{nickName}-{random}', saveDirPath=os.getcwd()):
+    def SavePic(msgItem, fileName='{date}-{userName}-{nickName}-{random}', saveDirPath=os.getcwd(), nickname_replace_dict={}):
         """
             根据传入的消息找到子节点中是按钮且Name属性为空的，点击后进行保存，若图片不在当前窗口显示时，会自动滚动
             TODO 每次调用都会创建WeChat对象，有点费资源啊
         :param msgItem: 需要保存的节点
         :param fileName: 指定文件名格式，其中的花括号会转为对应的内容（会将用户名和昵称中的短杠去掉），为空则使用文件原名，在微信里就是：微信图片加日期和时间
         :param saveDirPath: 图片保存的文件夹绝对路径，不存在则创建，默认是当前路径，若不是个文件夹则抛出错误
+        :param nickname_replace_dict: 昵称替换dict，若v不为空则替换为k+v
         :return: 保存成功时返回图片名，非图片的item时返回None
         """
         if msgItem is None or not msgItem.Name == WxUtils._getSpecialMsgType(WxParam.PICTURE_MSG_TYPE):
@@ -295,7 +303,7 @@ class WxUtils:
         while msgItem.BoundingRectangle.top < wx.MsgList.BoundingRectangle.top+10:
             wx.MsgList.WheelUp(wheelTimes=3, waitTime=0.1)
         # 图片下边界大于微信聊天窗口界面表示在下方，要往下滚动
-        while msgItem.BoundingRectangle.bottom > wx.MsgList.BoundingRectangle.bottom:
+        while msgItem.BoundingRectangle.bottom > wx.MsgList.BoundingRectangle.bottom+5:
             wx.MsgList.WheelDown(wheelTimes=3, waitTime=0.1)
         msgItem.ButtonControl(Name='').Click()
         Pic = uia.WindowControl(ClassName='ImagePreviewWnd', Name='图片查看')
@@ -308,9 +316,13 @@ class WxUtils:
             fileName = PicName
         else:
             msg = WxUtils.SplitMessage(msgItem)
+            nickname = msg[2]
+            for k, v in nickname_replace_dict.items():
+                if k in nickname:
+                    nickname = nickname.replace(k, v if not v else k + v)
             fileName = fileName.replace('{date}', time.strftime('%Y%m%d', time.localtime()))\
                 .replace('{userName}', msg[1].replace('-', ''))\
-                .replace('{nickName}', msg[2].replace('-', ''))\
+                .replace('{nickName}', nickname.replace('-', ''))\
                 .replace('{random}', str(int(random.uniform(10000, 99999))))
         FilePath = os.path.realpath(os.path.join(saveDirPath, fileName + Ex))
         print('save picture:', FilePath)

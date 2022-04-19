@@ -23,13 +23,13 @@ class Xlsx(object):
         self.worksheet = self.workbook.worksheets[sheet_index]
         self.next_write_row_index = 1
 
-    def init_header(self, header_row: list, header_width_dict: dict):
+    def init_header(self, header_row: list, header_width_dict: dict, header_row_index=1):
         logger.info('init header row: {0}, width: {1}'.format(header_row, header_width_dict))
         for k, v in header_width_dict.items():
             self.worksheet.column_dimensions[k].width = v
         for i, header in enumerate(header_row):
-            self.worksheet.cell(1, i + 1, header)
-        self.next_write_row_index = 2
+            self.worksheet.cell(header_row_index, i + 1, header)
+        self.next_write_row_index = header_row_index + 1
 
     def set_next_write_row_index(self, next_write_row_index):
         self.next_write_row_index = next_write_row_index
