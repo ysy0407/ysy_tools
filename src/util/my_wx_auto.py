@@ -5,11 +5,15 @@
 # !python3
 # -*- coding: utf-8 -*-
 """
+因为基于网页版的itchat都已经不能用了，就用了基于uiautomation的wxauto
+自己更新后适配微信的3.6.0.18版本
+"""
+"""
 Author: tikic@qq.com
 Source: https://github.com/cluic/wxauto
 License: MIT License
 Version: 3.3.5.3
-# 因为基于网页版的itchat都已经不能用了，就用了基于uiautomation的wxauto
+Update: 2021-09-06
 """
 import uiautomation as uia
 import win32gui, win32con
@@ -17,10 +21,6 @@ import win32clipboard as wc
 import time
 import random
 import os
-
-AUTHOR_EMAIL = 'tikic@qq.com'
-UPDATE = '2021-09-06'
-VERSION = '3.3.5.3'
 
 COPYDICT = {}
 MY_USERNAME = '沐'
@@ -202,6 +202,23 @@ class WeChat:
         else:
             return 0
 
+    def click_picture(self, msgItem):
+        """
+            根据传入的消息找到子节点中是按钮且Name属性为空，若图片不在当前窗口显示时，会自动滚动
+        :param msgItem: 图片节点，Name应为[图片]
+        :return: 非图片节点时返回None，点击成功时返回click
+        """
+        if msgItem is None or not msgItem.Name == WxUtils.getSpecialMsgType(WxParam.PICTURE_MSG_TYPE):
+            return None
+        # 图片上边界小于微信聊天窗口界面表示在上方，要往上滚动
+        while msgItem.BoundingRectangle.top < self.MsgList.BoundingRectangle.top+10:
+            self.MsgList.WheelUp(wheelTimes=3, waitTime=0.1)
+        # 图片下边界大于微信聊天窗口界面表示在下方，要往下滚动
+        while msgItem.BoundingRectangle.bottom > self.MsgList.BoundingRectangle.bottom+5:
+            self.MsgList.WheelDown(wheelTimes=3, waitTime=0.1)
+        msgItem.ButtonControl(Name='').Click()
+        return 'click'
+
 
 class WxUtils:
 
@@ -240,7 +257,7 @@ class WxUtils:
         return msg
 
     @staticmethod
-    def _getSpecialMsgType(msgType):
+    def getSpecialMsgType(msgType):
         return '[{}]'.format(msgType)
 
     @staticmethod
@@ -281,31 +298,22 @@ class WxUtils:
         return im
 
     @staticmethod
-    def SavePic(msgItem, fileName='{date}-{userName}-{nickName}-{random}', saveDirPath=os.getcwd(), nickname_replace_dict={}):
+    def SavePic(msgItem, fileName='{date}-{userName}-{nickName}-{random}', saveDirPath=os.getcwd(), nickname_replace_dict={}, nickname_replace_append_key=False, use_clipboard=True):
         """
-            根据传入的消息找到子节点中是按钮且Name属性为空的，点击后进行保存，若图片不在当前窗口显示时，会自动滚动
-            TODO 每次调用都会创建WeChat对象，有点费资源啊
+            将当前点开的图片进行保存，点开的方法：WeChat.click_picture
         :param msgItem: 需要保存的节点
         :param fileName: 指定文件名格式，其中的花括号会转为对应的内容（会将用户名和昵称中的短杠去掉），为空则使用文件原名，在微信里就是：微信图片加日期和时间
         :param saveDirPath: 图片保存的文件夹绝对路径，不存在则创建，默认是当前路径，若不是个文件夹则抛出错误
-        :param nickname_replace_dict: 昵称替换dict，若v不为空则替换为k+v
+        :param nickname_replace_dict: 昵称替换dict，将昵称中的k替换为v
+        :param nickname_replace_append_key: 昵称替换dict，是否将k替换为k+v
+        :param use_clipboard: 是否使用粘贴板，使用的话更快
         :return: 保存成功时返回图片名，非图片的item时返回None
         """
-        if msgItem is None or not msgItem.Name == WxUtils._getSpecialMsgType(WxParam.PICTURE_MSG_TYPE):
-            return None
         if not os.path.exists(saveDirPath):
             os.mkdir(saveDirPath)
             print('the path is not exist, now make it', saveDirPath)
         if not os.path.isdir(saveDirPath):
             raise Exception('the path is not a dir', saveDirPath)
-        wx = WeChat()
-        # 图片上边界小于微信聊天窗口界面表示在上方，要往上滚动
-        while msgItem.BoundingRectangle.top < wx.MsgList.BoundingRectangle.top+10:
-            wx.MsgList.WheelUp(wheelTimes=3, waitTime=0.1)
-        # 图片下边界大于微信聊天窗口界面表示在下方，要往下滚动
-        while msgItem.BoundingRectangle.bottom > wx.MsgList.BoundingRectangle.bottom+5:
-            wx.MsgList.WheelDown(wheelTimes=3, waitTime=0.1)
-        msgItem.ButtonControl(Name='').Click()
         Pic = uia.WindowControl(ClassName='ImagePreviewWnd', Name='图片查看')
         Pic.SendKeys('{Ctrl}s')
         SaveAs = Pic.WindowControl(ClassName='#32770', Name='另存为...')
@@ -319,14 +327,19 @@ class WxUtils:
             nickname = msg[2]
             for k, v in nickname_replace_dict.items():
                 if k in nickname:
-                    nickname = nickname.replace(k, v if not v else k + v)
+                    nickname = nickname.replace(k, k+v if nickname_replace_append_key else v)
             fileName = fileName.replace('{date}', time.strftime('%Y%m%d', time.localtime()))\
                 .replace('{userName}', msg[1].replace('-', ''))\
-                .replace('{nickName}', nickname.replace('-', ''))\
+                .replace('{nickName}', nickname.replace('-', '').replace(' ', ''))\
                 .replace('{random}', str(int(random.uniform(10000, 99999))))
         FilePath = os.path.realpath(os.path.join(saveDirPath, fileName + Ex))
         print('save picture:', FilePath)
-        SaveAsEdit.SendKeys(FilePath)
+        # 使用粘贴板，加快保存速度，但是像打字一样更帅诶
+        if use_clipboard:
+            WxUtils.SetClipboard(FilePath)
+            SaveAsEdit.SendKeys("{Ctrl}v")
+        else:
+            SaveAsEdit.SendKeys(FilePath)
         # 将点击保存键保存改为传入回车键，减少鼠标移动过程以加快速度
         SaveAsEdit.SendKeys('{Enter}')
         # SaveButton.Click()
